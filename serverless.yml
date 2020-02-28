@@ -1,0 +1,24 @@
+service: cogeo-watchbot-fargate
+
+custom:
+  bucket: ${opt:bucket}
+  stackFullName: ${self:service}-${self:provider.stage}-${self:provider.region}
+
+provider:
+  name: aws
+  runtime: python3.7
+  stage: ${opt:stage, 'production'}
+  region: ${opt:region, 'us-east-1'}
+  
+  deploymentBucket: ${self:custom.bucket}
+  
+  # stackTags:
+  #   Project: my-project
+  #   Client: john
+  #   Owner: doe
+
+resources:
+  - ${file(./resources/queues.yml)} # SQS + SNS
+  - ${file(./resources/vpc.yml)} # VPC
+  - ${file(./resources/ecs.yml)} # ECS
+  - ${file(./resources/autoscaling.yml)} # autoscaling

@@ -1,0 +1,115 @@
+
+Resources:
+  CloudwatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/ecs/${self:service}-${self:provider.stage}
+      RetentionInDays: 3
+  
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+
+  ECSTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: ${self:custom.stackFullName}
+      Memory: ${file(./resources/config.yml):ecs.memory}
+      Cpu: ${file(./resources/config.yml):ecs.cpu}
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt TaskRole.Arn
+      RequiresCompatibilities:
+        - FARGATE
+      ContainerDefinitions:
+      - Name: ${self:custom.stackFullName}
+        Essential: true
+        Image: ${file(./resources/config.yml):ecs.image}
+        Environment:
+          - Name: SQS_NAME
+            Value: !GetAtt
+              - TranslatorQueue
+              - QueueName
+        LogConfiguration:
+          LogDriver: awslogs
+          Options:
+            awslogs-group: !Ref CloudwatchLogsGroup
+            awslogs-region: ${self:provider.region}
+            awslogs-stream-prefix: ecs
+            awslogs-create-group: true
+
+  # This is a role which is used by the ECS tasks themselves.
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: ${self:custom.stackFullName}-exec-role
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  # Allow the ECS Tasks to download images from ECR
+                  - 'ecr:GetAuthorizationToken'
+                  - 'ecr:BatchCheckLayerAvailability'
+                  - 'ecr:GetDownloadUrlForLayer'
+                  - 'ecr:BatchGetImage'
+
+                  # Allow the ECS tasks to upload logs to CloudWatch
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: '*'
+
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: ${self:custom.stackFullName}-task-role
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:*
+                Resource:
+                  - !GetAtt TranslatorQueue.Arn
+
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource:
+                  - arn:aws:s3:::${self:custom.bucket}*
+
+  # The service. The service is a resource which allows you to run multiple
+  # copies of a type of task, and gather up their logs and metrics, as well
+  # as monitor the number of running tasks and replace any that have crashed
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: ${self:custom.stackFullName}
+      Cluster: !Ref ECSCluster
+      LaunchType: FARGATE
+      DesiredCount: ${file(./resources/config.yml):ecs.minInstances}
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups: 
+            - !Ref FargateContainerSecurityGroup
+          Subnets:
+            - !Ref Subnet1
+            - !Ref Subnet2
+      TaskDefinition: !Ref ECSTaskDefinition
+    DependsOn:
+      - FargateContainerSecurityGroup
+      - ECSTaskDefinition

@@ -1,0 +1,12 @@
+ecs:
+  image: '{a docker image}'
+  
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ecs-taskdefinition.html#cfn-ecs-taskdefinition-memory
+  memory: 8192
+  
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-ecs-taskdefinition.html#cfn-ecs-taskdefinition-cpu
+  cpu: 2048
+
+  # Auto scaling
+  minInstances: 0
+  maxInstances: 10

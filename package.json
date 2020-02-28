@@ -1,0 +1,9 @@
+{
+    "name": "cogeo-watchbot-fargate",
+    "version": "0.0.1",
+    "description": "",
+    "devDependencies": {
+        "serverless": "^1.23.0"
+    },
+    "author": ""
+}

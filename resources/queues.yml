@@ -1,0 +1,68 @@
+# SQS + SNS resources
+
+Resources:
+  TranslatorTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: ${self:service}-${self:provider.stage}-snsTopic
+
+  TranslatorQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      VisibilityTimeout: 180
+      QueueName: ${self:service}-${self:provider.stage}-queue
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt
+          - DeadLetterQueue
+          - Arn
+        maxReceiveCount: 2
+
+  # Create our Dead Letter SQS
+  DeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      MessageRetentionPeriod: 1209600
+      QueueName: ${self:service}-${self:provider.stage}-DeadLetterQueue
+
+  QueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: "allow-sns-messages"
+            Effect: Allow
+            Principal: "*"
+            Resource: !GetAtt
+              - TranslatorQueue
+              - Arn
+            Action: "SQS:SendMessage"
+            Condition:
+              ArnEquals:
+                "aws:SourceArn": !Ref TranslatorTopic
+      Queues:
+        - Ref: TranslatorQueue
+
+  QueueSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref TranslatorTopic
+      Endpoint: !GetAtt
+        - TranslatorQueue
+        - Arn
+      Protocol: sqs
+      RawMessageDelivery: 'false'
+
+Outputs:
+  snsTopic:
+    Value: !Ref TranslatorTopic
+    Export:
+      Name: ${self:custom.stackFullName}-snsTopic
+
+  QueueUrl:
+    Description: The URL for the primary work queue
+    Value: !Ref TranslatorQueue
+
+  DeadLetterQueueUrl:
+    Description: The URL for the dead letter queue
+    Value: !Ref DeadLetterQueue
